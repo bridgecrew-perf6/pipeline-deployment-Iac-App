@@ -1,5 +1,8 @@
 # Deploy Frontend and Backend Apps using Azure DevOps Pipeline
 
+![image](https://user-images.githubusercontent.com/45221469/155905510-78a598f1-348a-4a8e-863e-f0c394e98a56.png)
+
+
 
 The pipeline was configured using Azure DevOps `yaml` editor to deploy to the Azure Inrastructure created by the terraform template in `Terraform-deployment` folder in this repository
 
