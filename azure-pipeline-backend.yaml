@@ -1,0 +1,143 @@
+# Docker
+# Build a Docker image
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+  branches:
+    include:
+      - release/v1.0.0
+      - development
+
+pr: none
+resources:
+  - repo: self
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  ## Add this under variables section in the pipeline
+  azureSubscription: <Name of the Azure subscription>
+  appName-dev: <Name of the Dev-Web App>
+  appName-QA: <Name of the QA-Web App>
+  appName-Prod: <Name of the Prod-Web App>
+  containerRegistry: <Name of the Azure container registry>
+  imageRepository: <Name of image repository>
+  ACRServiceConnection: <Name of the service connection for ACR>
+  dockerfilePath: '$(Build.SourcesDirectory)/Dockerfile.backend'
+  tag: '$(Build.BuildId)'
+
+stages:
+  - stage: Build
+    displayName: Build image
+    jobs:
+      - job: Build
+        displayName: Build
+        steps:
+          - bash: |
+              env | sort
+          - checkout: self
+          # - task: MavenAuthenticate@0
+          #   displayName: 'Maven Authenticate'
+          #   inputs:
+          #     artifactsFeeds: feed
+          - script: |
+              cd $(Build.SourcesDirectory)
+              sudo chmod +x mvnw
+              ./mvnw clean verify
+              cd target
+              ls
+              jar -xf ./react-and-spring-data-rest-*.jar
+            displayName: Build java app
+           # publish test results into Azure pipelines 
+          - task: PublishTestResults@2
+            displayName: 'Test Results'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '$(Build.SourcesDirectory)/**/test-*.xml'
+              failTaskOnFailedTests: true            
+          - task: Docker@2
+            inputs:
+                containerRegistry: $(ACRServiceConnection)
+                command: 'login'
+
+          - task: Docker@2
+            displayName: Build and push an image
+            inputs:
+              command: buildAndPush
+              buildContext: '$(Build.SourcesDirectory)'
+              dockerfile: $(dockerfilePath-backend)
+              repository: $(imageRepository)
+              tags: |
+                $(tag)
+                latest
+          - task: CopyFiles@2
+            inputs:
+              SourceFolder: '$(System.DefaultWorkingDirectory)'
+              Contents: '**/*.yaml'
+              TargetFolder: '$(Build.ArtifactStagingDirectory)'
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'
+
+  - stage: Release_to_dev_env
+    displayName: Release to dev-env
+    jobs:
+    - deployment: Release
+      displayName: 'Release to dev-env'
+      environment: dev-env
+      pool:
+        vmImage: ubuntu-latest
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - checkout: self
+            - task: AzureWebAppContainer@1
+              displayName: 'Azure Web App on Container Deploy to Dev'
+              inputs:
+                azureSubscription: $(azureSubscription)
+                appName: $(appName-dev)
+                containers: $(containerRegistry)/$(imageRepository):$(tag)
+
+  - stage: Release_to_QA_env
+    displayName: Release to QA-env
+    jobs:
+    - deployment: Release
+      displayName: 'Release to QA-env'
+      environment: QA-env
+      pool:
+        vmImage: ubuntu-latest
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - checkout: self
+            - task: AzureWebAppContainer@1
+              displayName: 'Azure Web App on Container Deploy to QA'
+              inputs:
+                azureSubscription: $(azureSubscription)
+                appName: $(appName-QA)
+                containers: $(containerRegistry)/$(imageRepository):$(tag)
+
+  - stage: Release_to_Prod
+    displayName: Release to Prod
+    jobs:
+    - deployment: Release
+      displayName: 'Release to Prod'
+      environment: Prod
+      pool:
+        vmImage: ubuntu-latest
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - checkout: self
+            - task: AzureWebAppContainer@1
+              displayName: 'Azure Web App on Container Deploy to Prod'
+              inputs:
+                azureSubscription: $(azureSubscription)
+                appName: $(appName-Prod)
+                containers: $(containerRegistry)/$(imageRepository):$(tag)

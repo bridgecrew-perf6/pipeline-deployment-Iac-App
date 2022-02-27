@@ -1,0 +1,68 @@
+
+trigger:
+  branches:
+    include:
+      - release/v1.0.0
+      - development
+
+pr: none
+resources:
+  - repo: self
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  ## Add this under variables section in the pipeline
+  azureSubscription: <Name of the Azure subscription>
+  storageaccountname: <Name of storage account>
+  resourcegroupname: <Name of the resource group>
+  containername: <Name of your container>
+  azureserviceconnection: <Name of your subscription>
+
+
+stages:
+  - stage: Deploy_terraform_Infra
+    displayName: Deploy-terraform-infra
+    jobs:
+      - job: Deploy
+        displayName: Deploy
+        steps:
+          - bash: |
+              env | sort
+          - checkout: self
+          - task: TerraformTaskV1@0
+            displayName: Terraform Init
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: $(System.DefaultWorkingDirectory)/Terraform-deployment
+              backendServiceArm: $(azureSubscription)
+              backendAzureRmResourceGroupName: $(resourcegroupname)
+              backendAzureRmStorageAccountName: $(storageaccountname)
+              backendAzureRmContainerName: $(containername)
+              backendAzureRmKey: 'tf/terraform.tfstate'
+          - task: TerraformTaskV1@0
+            displayName: Terraform Plan
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: $(System.DefaultWorkingDirectory)/Terraform-deployment
+              environmentServiceNameAzureRM: $(azureserviceconnection)
+
+          - task: TerraformTaskV1@0
+            displayName: Terraform Apply
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: $(System.DefaultWorkingDirectory)/Terraform-deployment
+              environmentServiceNameAzureRM: $(azureserviceconnection)
+
+          - task: TerraformTaskV1@0
+            displayName: Terraform Destroy
+            enabled: false
+            inputs:
+              provider: 'azurerm'
+              command: 'destroy'
+              workingDirectory: $(System.DefaultWorkingDirectory)/Terraform-deployment
+              environmentServiceNameAzureRM: $(azureserviceconnection)

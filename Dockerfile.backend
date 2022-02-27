@@ -1,0 +1,27 @@
+FROM openjdk:8-jdk-alpine
+
+# Create a group and user for itm
+RUN addgroup -g 1000 -S spring && adduser -u 1000 -S spring -G spring -h /opt/spring
+
+# Create app directories
+RUN mkdir -p /usr/local/spring && chown spring:spring /usr/local/spring && \
+  chmod 777 -R /tmp && chmod o+t -R /tmp
+
+
+#COPY from target/react-and-spring-data-rest-*.jar to aplicationRun.jar
+COPY target/react-and-spring-data-rest-*.jar /opt/spring/applicationRun.jar
+
+# Change directory owners
+RUN chown -R spring:spring /opt/spring
+
+# Run as itm
+USER spring
+
+# Change to app directory
+WORKDIR /opt/spring/
+
+# Start the application
+CMD ["/usr/bin/java","-jar", "applicationRun.jar"]
+
+# Expose standard tomcat port
+EXPOSE 8080
